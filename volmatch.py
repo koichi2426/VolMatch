@@ -2,27 +2,39 @@ import os
 from pydub import AudioSegment
 
 # === 設定 ===
-INPUT_DIR = "audio_mp3"         # MP3ファイルが格納されているフォルダ
-OUTPUT_DIR = "normalized_mp3"   # 正規化済みファイルの出力先
-TARGET_dBFS = -14.0             # 約92dB SPLに相当する目標音量（dBFS換算）
+INPUT_DIR = "audio_mp3"          # 入力フォルダ
+OUTPUT_DIR = "normalized_mp3"    # 出力フォルダ
+TARGET_dBFS = -20.0              # 目標音量（通常は -20.0 dBFS）
+MIN_dBFS = -92.0                 # 最小音量
+MAX_dBFS = 0.0                   # 最大音量（dBFSは基本的に0が最大）
 
-# 出力先フォルダを作成（存在しない場合）
+# 出力フォルダがなければ作成
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-# 音量を目標に合わせる関数
+# 音量調整関数（範囲内に収める）
 def match_target_amplitude(sound, target_dBFS):
-    change_in_dBFS = target_dBFS - sound.dBFS
-    return sound.apply_gain(change_in_dBFS)
+    current_dBFS = sound.dBFS
+    change_in_dB = target_dBFS - current_dBFS
+    new_sound = sound.apply_gain(change_in_dB)
+    
+    # 音量チェック
+    final_dBFS = new_sound.dBFS
+    if final_dBFS > MAX_dBFS:
+        new_sound = new_sound.apply_gain(MAX_dBFS - final_dBFS)
+    elif final_dBFS < MIN_dBFS:
+        new_sound = new_sound.apply_gain(MIN_dBFS - final_dBFS)
+    
+    return new_sound
 
-# MP3ファイルを一括処理
+# 一括処理
 for filename in os.listdir(INPUT_DIR):
     if filename.lower().endswith(".mp3"):
         filepath = os.path.join(INPUT_DIR, filename)
         sound = AudioSegment.from_mp3(filepath)
-        normalized_sound = match_target_amplitude(sound, TARGET_dBFS)
+        normalized = match_target_amplitude(sound, TARGET_dBFS)
 
         output_path = os.path.join(OUTPUT_DIR, filename)
-        normalized_sound.export(output_path, format="mp3")
-        print(f"✅ Normalized to approx. 92dB SPL: {filename}")
+        normalized.export(output_path, format="mp3")
+        print(f"Processed: {filename} → {normalized.dBFS:.2f} dBFS")
 
-print("🎉 すべてのMP3ファイルの音量を約92dB SPLに正規化しました。")
+print("✅ 全MP3ファイルの音量を -92dB ～ 0dB に収めました。")
